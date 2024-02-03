@@ -20,6 +20,7 @@ import {
  *     longitude: number | string,
  *     sourceLatitude: number | undefined | null,
  *     sourceLongitude: number | undefined | null,
+ *     address: string | undefined | null,
  *     alwaysIncludeGoogle: boolean | undefined | null,
  *     googleForceLatLon: boolean | undefined | null,
  *     googlePlaceId: number | string | undefined | null,
@@ -42,12 +43,17 @@ export async function showLocation(options) {
   let sourceLat;
   let sourceLng;
   let sourceLatLng;
+  let fullAddress;
 
   if (options.sourceLatitude != null && options.sourceLongitude != null) {
     useSourceDestiny = true;
     sourceLat = parseFloat(options.sourceLatitude);
     sourceLng = parseFloat(options.sourceLongitude);
     sourceLatLng = `${sourceLat},${sourceLng}`;
+  }
+
+  if (options.address) {
+    fullAddress = encodeURIComponent(options.address)
   }
 
   const lat = parseFloat(options.latitude);
@@ -125,14 +131,18 @@ export async function showLocation(options) {
     case 'apple-maps':
       const appleDirectionMode = getDirectionsModeAppleMaps();
       url = prefixes['apple-maps'];
-      if (useSourceDestiny || options.directionsMode) {
-        url = `${url}?daddr=${latlng}`;
-        url += sourceLatLng ? `&saddr=${sourceLatLng}` : '';
-      } else if (!options.appleIgnoreLatLon) {
-        url = `${url}?ll=${latlng}`;
+      if (fullAddress) {
+        url = `${url}?address=${fullAddress}`;
+      } else {
+        if (useSourceDestiny || options.directionsMode) {
+          url = `${url}?daddr=${latlng}`;
+          url += sourceLatLng ? `&saddr=${sourceLatLng}` : '';
+        } else if (!options.appleIgnoreLatLon) {
+          url = `${url}?ll=${latlng}`;
+        }
       }
       url +=
-        useSourceDestiny || options.directionsMode || !options.appleIgnoreLatLon
+        useSourceDestiny || options.directionsMode || !options.appleIgnoreLatLon || fullAddress
           ? '&'
           : '?';
       url += `q=${title ? encodedTitle : 'Location'}`;
@@ -158,28 +168,36 @@ export async function showLocation(options) {
         url += googleDirectionMode ? `&travelmode=${googleDirectionMode}` : '';
       } else {
         // Use "search" as this will open up a single marker
-        url = 'https://www.google.com/maps/search/?api=1';
-
-        if (!options.googleForceLatLon && title) {
-          url += `&query=${encodedTitle}`;
+        if (fullAddress) {
+          url = `https://www.google.com/maps/search/?q=${fullAddress}`;
         } else {
-          url += `&query=${latlng}`;
-        }
+          url = 'https://www.google.com/maps/search/?api=1';
 
-        url += options.googlePlaceId
+          if (!options.googleForceLatLon && title) {
+            url += `&query=${encodedTitle}`;
+          } else {
+            url += `&query=${latlng}`;
+          }
+
+          url += options.googlePlaceId
           ? `&query_place_id=${options.googlePlaceId}`
           : '';
+          }
       }
       break;
     case 'citymapper':
-      url = `${prefixes.citymapper}directions?endcoord=${latlng}`;
+      if (fullAddress) {
+        throw new Error('Cannot use fullAddress on citymapper. This is not supported.')
+      } else {
+        url = `${prefixes.citymapper}directions?endcoord=${latlng}`;
 
-      if (title) {
-        url += `&endname=${encodedTitle}`;
-      }
+        if (title) {
+          url += `&endname=${encodedTitle}`;
+        }
 
-      if (useSourceDestiny) {
-        url += `&startcoord=${sourceLatLng}`;
+        if (useSourceDestiny) {
+          url += `&startcoord=${sourceLatLng}`;
+        }
       }
       break;
     case 'uber':
